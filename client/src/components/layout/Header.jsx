@@ -42,14 +42,7 @@ export default function Header() {
 
       {/* Right — search, theme toggle, avatar, logout */}
       <div className="flex items-center gap-2">
-        {/* Search placeholder button */}
-        <button
-          className="btn-ghost rounded-xl p-2 hidden lg:flex"
-          aria-label="Search"
-        >
-          <Search className="h-[18px] w-[18px] text-gray-500 dark:text-gray-400" />
-        </button>
-
+      
         {/* Dark-mode toggle with animated icons */}
         <button
           onClick={toggleTheme}
