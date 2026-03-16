@@ -1,0 +1,33 @@
+# AI Server - Python Dependencies
+# =================================
+
+# Web framework
+fastapi>=0.109.0,<1.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# Document processing
+PyMuPDF>=1.23.0
+python-pptx>=0.6.21
+Pillow>=10.0.0
+
+# OCR
+easyocr>=1.7.0
+
+# AI & ML
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4
+numpy>=1.24.0,<2.0
+httpx>=0.25.0
+transformers>=4.36.0
+torch>=2.1.0
+
+# Speech
+openai-whisper>=20231117
+gTTS>=2.5.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+aiofiles>=23.2.0

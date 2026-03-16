@@ -1,0 +1,340 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════
+   BASE LAYER — Root variables & resets
+   ═══════════════════════════════════════════ */
+@layer base {
+  :root {
+    --color-bg: 240 244 248;
+    --color-surface: 255 255 255;
+    --color-text: 15 23 42;
+    --color-primary: 51 102 255;
+    --color-accent: 51 102 255;
+    --glass-bg: rgba(255, 255, 255, 0.55);
+    --glass-border: rgba(255, 255, 255, 0.40);
+    --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.12);
+  }
+
+  .dark {
+    --color-bg: 2 6 23;
+    --color-surface: 15 23 42;
+    --color-text: 241 245 249;
+    --color-primary: 168 85 247;
+    --color-accent: 168 85 247;
+    --glass-bg: rgba(15, 23, 42, 0.55);
+    --glass-border: rgba(30, 41, 59, 0.50);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-background-light dark:bg-background-dark
+           text-gray-800 dark:text-gray-100
+           font-sans transition-colors duration-300;
+    font-size: 1.0625rem;   /* 17px base for accessibility */
+    line-height: 1.625rem;
+  }
+
+  *:focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary-500 dark:outline-accent-400 rounded-lg;
+  }
+
+  ::selection {
+    @apply bg-primary-200 dark:bg-accent-800 text-primary-900 dark:text-white;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   COMPONENT LAYER — Reusable UI classes
+   ═══════════════════════════════════════════ */
+@layer components {
+
+  /* ── Glass Card ─────────────────────────── */
+  .glass-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    @apply rounded-2xl backdrop-blur-xl transition-all duration-300;
+  }
+
+  .glass-card-hover {
+    @apply glass-card;
+  }
+  .glass-card-hover:hover {
+    @apply shadow-card-hover dark:shadow-card-hover-dark;
+    transform: translateY(-2px);
+  }
+
+  /* ── Solid Card (fallback) ─────────────── */
+  .card {
+    @apply rounded-2xl bg-white dark:bg-navy-800
+           border border-gray-200/60 dark:border-gray-700/40
+           shadow-sm transition-all duration-300;
+  }
+
+  /* ── Buttons ────────────────────────────── */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl
+           bg-gradient-to-r from-primary-500 to-primary-600
+           dark:from-accent-500 dark:to-accent-600
+           px-5 py-2.5 text-sm-a11y font-semibold text-white
+           shadow-md shadow-primary-500/20 dark:shadow-accent-500/20
+           transition-all duration-200
+           hover:shadow-lg hover:shadow-primary-500/30 dark:hover:shadow-accent-500/30
+           hover:brightness-110 active:scale-[0.97]
+           focus-visible:ring-2 focus-visible:ring-primary-400 dark:focus-visible:ring-accent-400
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-md;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl
+           border border-gray-200 dark:border-gray-600
+           bg-white/80 dark:bg-white/5 backdrop-blur-sm
+           px-5 py-2.5 text-sm-a11y font-semibold
+           text-gray-700 dark:text-gray-200
+           shadow-sm transition-all duration-200
+           hover:bg-gray-50 dark:hover:bg-white/10
+           hover:border-gray-300 dark:hover:border-gray-500
+           active:scale-[0.97]
+           focus-visible:ring-2 focus-visible:ring-primary-400 dark:focus-visible:ring-accent-400
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl
+           px-4 py-2 text-sm-a11y font-medium
+           text-gray-600 dark:text-gray-300
+           transition-all duration-200
+           hover:bg-gray-100/60 dark:hover:bg-white/5
+           active:scale-[0.97]
+           focus-visible:ring-2 focus-visible:ring-primary-400 dark:focus-visible:ring-accent-400;
+  }
+
+  /* ── Input Fields ──────────────────────── */
+  .input-field {
+    @apply w-full rounded-xl
+           border border-gray-200 dark:border-gray-600
+           bg-white/80 dark:bg-white/5 backdrop-blur-sm
+           px-4 py-3 text-sm-a11y
+           text-gray-900 dark:text-gray-100
+           placeholder:text-gray-400 dark:placeholder:text-gray-500
+           focus:border-primary-400 dark:focus:border-accent-400
+           focus:ring-2 focus:ring-primary-400/20 dark:focus:ring-accent-400/20
+           transition-all duration-200;
+  }
+
+  /* ── Badge ─────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full
+           px-2.5 py-0.5 text-xs font-semibold
+           bg-primary-100 dark:bg-accent-900/30
+           text-primary-700 dark:text-accent-300;
+  }
+
+  .badge-success {
+    @apply badge bg-emerald-100 dark:bg-emerald-900/30
+           text-emerald-700 dark:text-emerald-300;
+  }
+
+  .badge-warning {
+    @apply badge bg-amber-100 dark:bg-amber-900/30
+           text-amber-700 dark:text-amber-300;
+  }
+
+  /* ── Skeleton Loader ───────────────────── */
+  .skeleton {
+    @apply rounded-xl bg-gradient-to-r
+           from-gray-200 via-gray-100 to-gray-200
+           dark:from-gray-800 dark:via-gray-700 dark:to-gray-800
+           bg-[length:400%_100%] animate-shimmer;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   UTILITY LAYER
+   ═══════════════════════════════════════════ */
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary-500 to-primary-700
+           dark:from-accent-400 dark:to-accent-600
+           bg-clip-text text-transparent;
+  }
+
+  .bg-mesh {
+    background-image:
+      radial-gradient(at 40% 20%, rgba(51, 102, 255, 0.08) 0px, transparent 50%),
+      radial-gradient(at 80% 0%, rgba(168, 85, 247, 0.06) 0px, transparent 50%),
+      radial-gradient(at 0% 50%, rgba(51, 102, 255, 0.05) 0px, transparent 50%);
+  }
+
+  .dark .bg-mesh {
+    background-image:
+      radial-gradient(at 40% 20%, rgba(168, 85, 247, 0.12) 0px, transparent 50%),
+      radial-gradient(at 80% 0%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
+      radial-gradient(at 0% 50%, rgba(168, 85, 247, 0.06) 0px, transparent 50%);
+  }
+}
+
+/* ═══════════════════════════════════════════
+   HIGH CONTRAST MODE
+   ═══════════════════════════════════════════ */
+html.high-contrast {
+  --color-bg: 255 255 255;
+  --color-surface: 255 255 255;
+  --color-text: 0 0 0;
+  --color-primary: 0 0 180;
+  --glass-bg: rgba(255, 255, 255, 0.95);
+  --glass-border: rgba(0, 0, 0, 0.6);
+  --glass-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.25);
+}
+
+html.high-contrast.dark {
+  --color-bg: 0 0 0;
+  --color-surface: 10 10 10;
+  --color-text: 255 255 255;
+  --color-primary: 100 180 255;
+  --color-accent: 180 140 255;
+  --glass-bg: rgba(0, 0, 0, 0.92);
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-shadow: 0 4px 16px 0 rgba(255, 255, 255, 0.1);
+}
+
+html.high-contrast body {
+  font-weight: 500;
+}
+
+html.high-contrast * {
+  border-color: rgba(0, 0, 0, 0.5) !important;
+}
+
+html.high-contrast.dark * {
+  border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+html.high-contrast .glass-card {
+  border-width: 2px;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html.high-contrast .btn-primary {
+  @apply bg-blue-800 dark:bg-blue-500 text-white font-bold shadow-none;
+  background-image: none;
+}
+
+html.high-contrast .btn-secondary {
+  @apply bg-white dark:bg-gray-900 text-black dark:text-white border-2 border-black dark:border-white font-bold shadow-none;
+}
+
+html.high-contrast .btn-ghost {
+  @apply text-black dark:text-white font-bold;
+}
+
+html.high-contrast .input-field {
+  @apply border-2 border-black dark:border-white bg-white dark:bg-black text-black dark:text-white;
+}
+
+html.high-contrast a,
+html.high-contrast .text-gradient {
+  @apply text-blue-800 dark:text-blue-300 underline;
+  -webkit-text-fill-color: unset;
+  background: none;
+}
+
+html.high-contrast *:focus-visible {
+  @apply outline-[3px] outline-offset-2 outline-black dark:outline-white;
+}
+
+/* ═══════════════════════════════════════════
+   LARGER TEXT MODE
+   ═══════════════════════════════════════════ */
+html.larger-text {
+  font-size: 120%;
+}
+
+html.larger-text body {
+  font-size: 1.25rem;
+  line-height: 1.95rem;
+}
+
+html.larger-text .text-xs {
+  font-size: 0.85rem;
+}
+
+html.larger-text .text-sm,
+html.larger-text .text-sm-a11y {
+  font-size: 1rem;
+}
+
+html.larger-text .text-base,
+html.larger-text .text-base-a11y {
+  font-size: 1.15rem;
+}
+
+html.larger-text .text-lg {
+  font-size: 1.35rem;
+}
+
+html.larger-text .text-xl {
+  font-size: 1.55rem;
+}
+
+html.larger-text .text-2xl {
+  font-size: 1.85rem;
+}
+
+/* ═══════════════════════════════════════════
+   SCROLLBAR
+   ═══════════════════════════════════════════ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300/60 dark:bg-gray-600/40 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400 dark:bg-gray-500;
+}
+
+/* ═══════════════════════════════════════════
+   MARKDOWN IN CHAT
+   ═══════════════════════════════════════════ */
+.prose-chat h1,
+.prose-chat h2,
+.prose-chat h3 {
+  @apply font-semibold mt-4 mb-2;
+}
+.prose-chat h1 { @apply text-lg; }
+.prose-chat h2 { @apply text-base font-bold; }
+.prose-chat p {
+  @apply mb-2 leading-relaxed;
+}
+.prose-chat ul, .prose-chat ol {
+  @apply ml-5 mb-2;
+}
+.prose-chat li {
+  @apply mb-1;
+}
+.prose-chat code {
+  @apply bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-md text-sm font-mono;
+}
+.prose-chat pre {
+  @apply bg-gray-100 dark:bg-gray-800/80 p-4 rounded-xl overflow-x-auto mb-3;
+}
+.prose-chat blockquote {
+  @apply border-l-4 border-primary-300 dark:border-accent-600 pl-4 italic text-gray-600 dark:text-gray-400 my-3;
+}
+.prose-chat a {
+  @apply text-primary-600 dark:text-accent-400 underline underline-offset-2 hover:text-primary-700 dark:hover:text-accent-300;
+}

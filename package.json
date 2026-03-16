@@ -1,0 +1,23 @@
+{
+  "name": "slide-reader-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multimodal AI-Powered Conversational Slide Reader with Intelligent Summarization and Voice Interaction",
+  "scripts": {
+    "dev:frontend": "cd client && npm run dev",
+    "dev:backend": "cd server && npm run dev",
+    "dev:ai": "cd ai-server && python -m uvicorn main:app --reload --port 8001",
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\" \"npm run dev:ai\"",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install && cd ../ai-server && pip install -r requirements.txt",
+    "build:frontend": "cd client && npm run build",
+    "lint:frontend": "cd client && npm run lint",
+    "lint:backend": "cd server && npm run lint"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
