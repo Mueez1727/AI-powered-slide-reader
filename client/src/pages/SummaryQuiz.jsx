@@ -16,101 +16,65 @@ import Skeleton from '../components/ui/Skeleton';
 import { useApp } from '../context/AppContext';
 
 /**
- * Normalize MCQ options to ensure exactly 4 valid options labeled A, B, C, D
- * Handles malformed API responses where options might be incomplete or contain N/A
+ * Parse quiz data from backend response.
+ * Backend format: { questions: [{ question, options: [{label, text}], correct_answer }] }
  */
-function normalizeMcqOptions(rawOptions, correctAnswer) {
-  const labels = ['A', 'B', 'C', 'D'];
-  const validOptions = [];
-
-  // Extract valid options from various formats
-  for (const opt of rawOptions || []) {
-    let text = '';
-    if (typeof opt === 'string') {
-      // Handle "A. Some text" format
-      const match = opt.match(/^[A-D]\.\s*(.+)$/i);
-      text = match ? match[1].trim() : opt.trim();
-    } else if (opt && typeof opt === 'object') {
-      text = opt.text || opt.value || opt.answer || '';
-      if (typeof text === 'string') text = text.trim();
-    }
-
-    // Skip empty, "N/A", or placeholder options
-    if (
-      text &&
-      text.toLowerCase() !== 'n/a' &&
-      text.toLowerCase() !== 'na' &&
-      text !== '-' &&
-      text !== '—' &&
-      text.length > 1
-    ) {
-      // Check if this option contains multiple answers (malformed)
-      // If option A contains all answers like "A) x B) y C) z D) w", split them
-      const multiMatch = text.match(/[A-D]\)\s*.+?(?=[A-D]\)|$)/gi);
-      if (multiMatch && multiMatch.length > 1) {
-        for (const part of multiMatch) {
-          const partMatch = part.match(/[A-D]\)\s*(.+)/i);
-          if (partMatch && partMatch[1].trim().length > 1) {
-            validOptions.push(partMatch[1].trim());
-          }
-        }
-      } else {
-        validOptions.push(text);
-      }
-    }
-  }
-
-  // Ensure we have exactly 4 options
-  // If we have more than 4, take the first 4
-  // If we have fewer than 4, this question is invalid
-  if (validOptions.length < 4) {
-    return null; // Invalid question
-  }
-
-  // Format options with proper labels
-  return validOptions.slice(0, 4).map((text, idx) => `${labels[idx]}. ${text}`);
-}
-
-/**
- * Normalize quiz data to ensure exactly 5 valid MCQs
- */
-function normalizeQuizData(data) {
-  const questions = data.questions || data.mcqs || [];
-  const normalizedQuestions = [];
+function parseQuizData(data) {
+  const questions = data?.questions || [];
+  const parsed = [];
 
   for (const q of questions) {
+    // Skip if no question text
     if (!q.question || typeof q.question !== 'string') continue;
 
-    const options = normalizeMcqOptions(
-      q.options || q.choices || q.answers,
-      q.correct_answer || q.correctAnswer || q.answer
-    );
+    // Get options - backend returns [{label, text}]
+    const rawOptions = q.options || [];
+    const validOptions = [];
 
-    if (!options) continue; // Skip malformed questions
+    for (const opt of rawOptions) {
+      let label = '';
+      let text = '';
 
-    // Determine correct answer index
-    let correctIndex = 0;
-    const correctAnswer = q.correct_answer || q.correctAnswer || q.answer || 'A';
-    if (typeof correctAnswer === 'string') {
-      const letter = correctAnswer.toUpperCase().charAt(0);
-      if (letter >= 'A' && letter <= 'D') {
-        correctIndex = letter.charCodeAt(0) - 65;
+      if (typeof opt === 'object' && opt !== null) {
+        label = opt.label || '';
+        text = opt.text || '';
+      } else if (typeof opt === 'string') {
+        // Handle "A. text" format
+        const match = opt.match(/^([A-D])[.)]\s*(.+)$/i);
+        if (match) {
+          label = match[1].toUpperCase();
+          text = match[2].trim();
+        } else {
+          text = opt.trim();
+        }
       }
-    } else if (typeof correctAnswer === 'number') {
-      correctIndex = Math.min(Math.max(0, correctAnswer), 3);
+
+      // Skip invalid options (empty, N/A, etc.)
+      if (text && text.toLowerCase() !== 'n/a' && text.length > 1) {
+        validOptions.push({ label: label || String.fromCharCode(65 + validOptions.length), text });
+      }
     }
 
-    normalizedQuestions.push({
+    // Need at least 2 options for a valid question
+    if (validOptions.length < 2) continue;
+
+    // Determine correct answer index
+    const correctLetter = (q.correct_answer || q.correctAnswer || 'A').toString().toUpperCase().charAt(0);
+    const correctIndex = correctLetter >= 'A' && correctLetter <= 'D'
+      ? correctLetter.charCodeAt(0) - 65
+      : 0;
+
+    parsed.push({
       question: q.question.trim(),
-      options,
-      correctIndex,
+      options: validOptions.slice(0, 4), // Max 4 options
+      correctIndex: Math.min(correctIndex, validOptions.length - 1),
     });
 
-    // Stop once we have 5 valid questions
-    if (normalizedQuestions.length >= 5) break;
+    // Stop at 5 questions
+    if (parsed.length >= 5) break;
   }
 
-  return normalizedQuestions;
+  return parsed;
 }
 
 export default function SummaryQuiz() {
@@ -125,6 +89,7 @@ export default function SummaryQuiz() {
   const [expandedSection, setExpandedSection] = useState('short'); // 'short' | 'detailed' | 'revision'
 
   const [summaryError, setSummaryError] = useState(false);
+  const [quizError, setQuizError] = useState(false);
 
   const handleSummarize = async () => {
     if (!selectedDoc) return toast.error('Select a document first');
@@ -162,31 +127,37 @@ export default function SummaryQuiz() {
 
   const handleGenerateQuiz = async () => {
     if (!selectedDoc) return toast.error('Select a document first');
+    console.log('Generate Quiz clicked for document:', selectedDoc);
+
     setLoadingQuiz(true);
     setQuiz([]);
     setAnswers({});
+    setQuizError(false);
+
     try {
-      // Explicitly call the MCQ generation endpoint
       const { data } = await api.post('/ai/generate-mcq', {
         documentId: selectedDoc,
-        count: 5 // Request 5 questions
       });
 
-      // Normalize and validate the quiz data
-      const normalizedQuestions = normalizeQuizData(data);
+      console.log('MCQ API response:', data);
 
-      if (normalizedQuestions.length === 0) {
-        toast.error('Could not generate valid quiz questions. Please try again.');
+      // Parse the quiz data from backend response
+      const questions = parseQuizData(data);
+
+      if (questions.length === 0) {
+        setQuizError(true);
+        toast.error('No valid quiz questions generated. Please try again.');
         return;
       }
 
-      if (normalizedQuestions.length < 5) {
-        toast.warning(`Generated ${normalizedQuestions.length} valid questions (some were malformed)`);
+      if (questions.length < 5) {
+        toast.success(`Generated ${questions.length} quiz questions`);
       }
 
-      setQuiz(normalizedQuestions);
+      setQuiz(questions);
     } catch (error) {
       console.error('Quiz generation error:', error);
+      setQuizError(true);
       const msg = error.response?.data?.detail || error.response?.data?.message || 'Quiz generation failed.';
       toast.error(msg);
     } finally {
@@ -271,6 +242,23 @@ export default function SummaryQuiz() {
           </p>
           <button onClick={handleSummarize} disabled={!selectedDoc} className="btn-primary">
             <RefreshCw className="h-4 w-4" /> Retry Summary
+          </button>
+        </motion.div>
+      )}
+
+      {/* Quiz error — retry prompt */}
+      {quizError && !loadingQuiz && quiz.length === 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card p-6 text-center"
+        >
+          <XCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+            Quiz generation failed. The AI model may be busy or unavailable.
+          </p>
+          <button onClick={handleGenerateQuiz} disabled={!selectedDoc} className="btn-secondary">
+            <RefreshCw className="h-4 w-4" /> Retry Quiz
           </button>
         </motion.div>
       )}
@@ -434,6 +422,9 @@ export default function SummaryQuiz() {
                       else if (revealed && isCorrect)
                         optClass += ' border-emerald-400/50';
 
+                      // Display option as "A. Option text"
+                      const optionText = typeof opt === 'object' ? `${opt.label}. ${opt.text}` : opt;
+
                       return (
                         <button
                           key={optIdx}
@@ -443,7 +434,7 @@ export default function SummaryQuiz() {
                           className={`w-full text-left flex items-center gap-3 ${optClass}`}
                           disabled={revealed}
                         >
-                          <span className="text-gray-700 dark:text-gray-300 flex-1">{opt}</span>
+                          <span className="text-gray-700 dark:text-gray-300 flex-1">{optionText}</span>
                           {revealed && isCorrect && (
                             <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                           )}
@@ -462,7 +453,7 @@ export default function SummaryQuiz() {
       </AnimatePresence>
 
       {/* Empty state */}
-      {!summaryData && !loadingSummary && !summaryError && quiz.length === 0 && !loadingQuiz && (
+      {!summaryData && !loadingSummary && !summaryError && quiz.length === 0 && !loadingQuiz && !quizError && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
