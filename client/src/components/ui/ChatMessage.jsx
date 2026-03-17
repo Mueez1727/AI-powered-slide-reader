@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import { motion } from 'framer-motion';
-import { User, Bot, Volume2, VolumeX, Loader2, Copy, Check } from 'lucide-react';
+import { User, Bot, Volume2, VolumeX, Loader2, Copy, Check, FileText } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import api from '../../lib/api';
 import toast from 'react-hot-toast';
@@ -10,10 +10,11 @@ import toast from 'react-hot-toast';
  *   • Markdown rendering
  *   • Copy-to-clipboard
  *   • Text-to-speech (manual + autoplay)
+ *   • Source slides display for AI responses
  *   • Full accessibility (ARIA roles, live regions, keyboard nav)
  *
  * Props:
- *   message        — { id, role, content }
+ *   message        — { id, role, content, sources? }
  *   autoplay       — if true AND role=assistant, auto-speak the message on mount
  *   onAudioStart   — callback when TTS starts playing
  *   onAudioEnd     — callback when TTS finishes playing
@@ -24,6 +25,10 @@ export default function ChatMessage({ message, autoplay = false, onAudioStart, o
   const [copied, setCopied] = useState(false);
   const audioRef = useRef(null);
   const hasAutoplayedRef = useRef(false);
+
+  // Extract source slides if available
+  const sources = message.sources || message.source_slides || [];
+  const hasSourceSlides = !isUser && Array.isArray(sources) && sources.length > 0;
 
   // ── Autoplay TTS for new AI messages ─────────────────────
   useEffect(() => {
@@ -129,6 +134,28 @@ export default function ChatMessage({ message, autoplay = false, onAudioStart, o
         <div className={`prose-chat text-sm-a11y leading-relaxed ${isUser ? 'text-white [&_code]:bg-white/15 [&_code]:text-white' : ''}`}>
           <ReactMarkdown>{message.content}</ReactMarkdown>
         </div>
+
+        {/* Source slides indicator */}
+        {hasSourceSlides && (
+          <div className="mt-2 pt-2 border-t border-gray-200/50 dark:border-gray-700/50">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <FileText className="h-3 w-3 text-gray-400 shrink-0" aria-hidden="true" />
+              <span className="text-xs text-gray-500 dark:text-gray-400">Sources:</span>
+              {sources.map((source, idx) => {
+                const slideNum = source.slide_number || source.slideNumber || source;
+                return (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-primary-100/50 dark:bg-accent-900/30 text-primary-700 dark:text-accent-300"
+                    title={source.heading || `Slide ${slideNum}`}
+                  >
+                    Slide {slideNum}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* AI-message actions — always visible for screen-reader / keyboard users */}
         {!isUser && (

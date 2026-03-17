@@ -66,7 +66,12 @@ export const sendMessage = async (req, res, next) => {
     chat.messages.push({ role: 'assistant', content: data.response });
     await chat.save();
 
-    res.json({ response: data.response });
+    // Return response with source slides for better context
+    res.json({
+      response: data.response,
+      sources: data.sources || [],
+      model: data.model || 'unknown'
+    });
   } catch (error) {
     if (error.code === 'ECONNREFUSED') {
       return res.status(503).json({ message: 'AI server is unavailable. Please ensure it is running.' });

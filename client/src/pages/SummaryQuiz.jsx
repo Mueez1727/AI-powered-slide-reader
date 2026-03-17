@@ -11,12 +11,111 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  RefreshCw,
 } from 'lucide-react';
 import api from '../lib/api';
 import toast from 'react-hot-toast';
 import ReactMarkdown from 'react-markdown';
 import Skeleton from '../components/ui/Skeleton';
 import { useApp } from '../context/AppContext';
+
+/**
+ * Normalize MCQ options to ensure exactly 4 valid options labeled A, B, C, D
+ * Handles malformed API responses where options might be incomplete or contain N/A
+ */
+function normalizeMcqOptions(rawOptions, correctAnswer) {
+  const labels = ['A', 'B', 'C', 'D'];
+  const validOptions = [];
+
+  // Extract valid options from various formats
+  for (const opt of rawOptions || []) {
+    let text = '';
+    if (typeof opt === 'string') {
+      // Handle "A. Some text" format
+      const match = opt.match(/^[A-D]\.\s*(.+)$/i);
+      text = match ? match[1].trim() : opt.trim();
+    } else if (opt && typeof opt === 'object') {
+      text = opt.text || opt.value || opt.answer || '';
+      if (typeof text === 'string') text = text.trim();
+    }
+
+    // Skip empty, "N/A", or placeholder options
+    if (
+      text &&
+      text.toLowerCase() !== 'n/a' &&
+      text.toLowerCase() !== 'na' &&
+      text !== '-' &&
+      text !== '—' &&
+      text.length > 1
+    ) {
+      // Check if this option contains multiple answers (malformed)
+      // If option A contains all answers like "A) x B) y C) z D) w", split them
+      const multiMatch = text.match(/[A-D]\)\s*.+?(?=[A-D]\)|$)/gi);
+      if (multiMatch && multiMatch.length > 1) {
+        for (const part of multiMatch) {
+          const partMatch = part.match(/[A-D]\)\s*(.+)/i);
+          if (partMatch && partMatch[1].trim().length > 1) {
+            validOptions.push(partMatch[1].trim());
+          }
+        }
+      } else {
+        validOptions.push(text);
+      }
+    }
+  }
+
+  // Ensure we have exactly 4 options
+  // If we have more than 4, take the first 4
+  // If we have fewer than 4, this question is invalid
+  if (validOptions.length < 4) {
+    return null; // Invalid question
+  }
+
+  // Format options with proper labels
+  return validOptions.slice(0, 4).map((text, idx) => `${labels[idx]}. ${text}`);
+}
+
+/**
+ * Normalize quiz data to ensure exactly 5 valid MCQs
+ */
+function normalizeQuizData(data) {
+  const questions = data.questions || data.mcqs || [];
+  const normalizedQuestions = [];
+
+  for (const q of questions) {
+    if (!q.question || typeof q.question !== 'string') continue;
+
+    const options = normalizeMcqOptions(
+      q.options || q.choices || q.answers,
+      q.correct_answer || q.correctAnswer || q.answer
+    );
+
+    if (!options) continue; // Skip malformed questions
+
+    // Determine correct answer index
+    let correctIndex = 0;
+    const correctAnswer = q.correct_answer || q.correctAnswer || q.answer || 'A';
+    if (typeof correctAnswer === 'string') {
+      const letter = correctAnswer.toUpperCase().charAt(0);
+      if (letter >= 'A' && letter <= 'D') {
+        correctIndex = letter.charCodeAt(0) - 65;
+      }
+    } else if (typeof correctAnswer === 'number') {
+      correctIndex = Math.min(Math.max(0, correctAnswer), 3);
+    }
+
+    normalizedQuestions.push({
+      question: q.question.trim(),
+      options,
+      correctIndex,
+    });
+
+    // Stop once we have 5 valid questions
+    if (normalizedQuestions.length >= 5) break;
+  }
+
+  return normalizedQuestions;
+}
 
 export default function SummaryQuiz() {
   const { state } = useApp();
@@ -34,14 +133,25 @@ export default function SummaryQuiz() {
     setLoadingSummary(true);
     setSummaryData(null);
     try {
-      const { data } = await api.post('/ai/summarize', { documentId: selectedDoc });
+      // Explicitly call the summarize endpoint (NOT MCQ)
+      const { data } = await api.post('/ai/summarize', {
+        documentId: selectedDoc
+      });
+
+      // Validate response structure
+      if (!data || (!data.short_summary && !data.detailed_explanation && !data.revision_notes)) {
+        toast.error('Received invalid summary data. Please try again.');
+        return;
+      }
+
       setSummaryData({
         short_summary: data.short_summary || '',
         detailed_explanation: data.detailed_explanation || '',
         revision_notes: data.revision_notes || '',
       });
-    } catch {
-      toast.error('Summarization failed');
+    } catch (error) {
+      console.error('Summarization error:', error);
+      toast.error('Summarization failed. Please try again.');
     } finally {
       setLoadingSummary(false);
     }
@@ -53,21 +163,28 @@ export default function SummaryQuiz() {
     setQuiz([]);
     setAnswers({});
     try {
-      const { data } = await api.post('/ai/generate-mcq', { documentId: selectedDoc });
-      // Normalize quiz data — API returns options as [{label, text}] and correct_answer as letter
-      const questions = (data.questions || []).map((q) => ({
-        question: q.question,
-        options: (q.options || []).map((opt) =>
-          typeof opt === 'string' ? opt : `${opt.label}. ${opt.text}`
-        ),
-        // Convert letter ("A","B","C","D") to zero-based index
-        correctIndex: q.correct_answer
-          ? q.correct_answer.charCodeAt(0) - 65
-          : 0,
-      }));
-      setQuiz(questions);
-    } catch {
-      toast.error('Quiz generation failed');
+      // Explicitly call the MCQ generation endpoint
+      const { data } = await api.post('/ai/generate-mcq', {
+        documentId: selectedDoc,
+        count: 5 // Request 5 questions
+      });
+
+      // Normalize and validate the quiz data
+      const normalizedQuestions = normalizeQuizData(data);
+
+      if (normalizedQuestions.length === 0) {
+        toast.error('Could not generate valid quiz questions. Please try again.');
+        return;
+      }
+
+      if (normalizedQuestions.length < 5) {
+        toast.warning(`Generated ${normalizedQuestions.length} valid questions (some were malformed)`);
+      }
+
+      setQuiz(normalizedQuestions);
+    } catch (error) {
+      console.error('Quiz generation error:', error);
+      toast.error('Quiz generation failed. Please try again.');
     } finally {
       setLoadingQuiz(false);
     }
@@ -150,7 +267,13 @@ export default function SummaryQuiz() {
               <Sparkles className="h-5 w-5 text-primary-500 dark:text-accent-400" /> Summary
             </h2>
             {loadingSummary ? (
-              <Skeleton variant="text" lines={5} />
+              <div className="space-y-4">
+                <Skeleton variant="text" lines={5} />
+                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Generating summary...
+                </div>
+              </div>
             ) : (
               <div className="space-y-3">
                 {/* Tab buttons */}
@@ -205,25 +328,46 @@ export default function SummaryQuiz() {
             exit={{ opacity: 0 }}
             className="space-y-4"
           >
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-white">
                 <ClipboardList className="h-5 w-5 text-primary-500 dark:text-accent-400" /> Quiz
+                {quiz.length > 0 && (
+                  <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
+                    ({quiz.length} questions)
+                  </span>
+                )}
               </h2>
-              {allAnswered && (
-                <span className="badge">
-                  Score: {score}/{quiz.length}
-                </span>
-              )}
+              <div className="flex items-center gap-3">
+                {allAnswered && (
+                  <span className="badge">
+                    Score: {score}/{quiz.length}
+                  </span>
+                )}
+                {quiz.length > 0 && !loadingQuiz && (
+                  <button
+                    onClick={handleGenerateQuiz}
+                    className="btn-ghost text-xs py-1.5 px-3"
+                    title="Generate new questions"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    New Quiz
+                  </button>
+                )}
+              </div>
             </div>
 
             {loadingQuiz ? (
               <div className="space-y-4">
-                {[0, 1, 2].map((i) => (
+                {[0, 1, 2, 3, 4].map((i) => (
                   <div key={i} className="glass-card p-5 space-y-3">
                     <Skeleton variant="rect" className="h-5 w-3/4" />
                     <Skeleton variant="text" lines={4} />
                   </div>
                 ))}
+                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Generating quiz questions...
+                </div>
               </div>
             ) : (
               quiz.map((q, qIdx) => (
@@ -238,7 +382,7 @@ export default function SummaryQuiz() {
                     {qIdx + 1}. {q.question}
                   </p>
                   <div className="space-y-2" role="radiogroup" aria-label={`Question ${qIdx + 1}`}>
-                    {(q.options || []).map((opt, optIdx) => {
+                    {q.options.map((opt, optIdx) => {
                       const chosen = answers[qIdx] === optIdx;
                       const isCorrect = q.correctIndex === optIdx;
                       const revealed = answers[qIdx] !== undefined;

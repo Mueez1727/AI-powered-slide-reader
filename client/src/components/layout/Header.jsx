@@ -1,4 +1,4 @@
-import { Sun, Moon, Menu, LogOut, User, Search } from 'lucide-react';
+import { Sun, Moon, Menu, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';

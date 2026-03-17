@@ -60,11 +60,18 @@ export default function Chat() {
         message: text.trim(),
       });
       const aiMsgId = generateId();
-      const aiMsg = { id: aiMsgId, role: 'assistant', content: data.response };
+      const aiMsg = {
+        id: aiMsgId,
+        role: 'assistant',
+        content: data.response,
+        sources: data.sources || [] // Include source slides
+      };
       dispatch({ type: 'ADD_CHAT_MESSAGE', payload: aiMsg });
       setLastMsgId(aiMsgId); // Mark for autoplay
-    } catch {
-      toast.error('Failed to get response');
+    } catch (error) {
+      console.error('Chat error:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to get response';
+      toast.error(errorMessage);
       const errMsg = {
         id: generateId(),
         role: 'assistant',
@@ -102,10 +109,15 @@ export default function Chat() {
       dispatch({ type: 'ADD_CHAT_MESSAGE', payload: userMsg });
     }
 
-    // Add AI response
+    // Add AI response with sources
     if (data.ai_response) {
       const aiMsgId = generateId();
-      const aiMsg = { id: aiMsgId, role: 'assistant', content: data.ai_response };
+      const aiMsg = {
+        id: aiMsgId,
+        role: 'assistant',
+        content: data.ai_response,
+        sources: data.sources || [] // Include source slides from voice response
+      };
       dispatch({ type: 'ADD_CHAT_MESSAGE', payload: aiMsg });
       // Audio is already autoplayed by VoiceRecorder via audio_url, so skip ChatMessage autoplay
     }

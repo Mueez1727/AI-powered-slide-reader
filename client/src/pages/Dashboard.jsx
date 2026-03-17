@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import FileUpload from '../components/ui/FileUpload';
+import ConfirmModal from '../components/ui/ConfirmModal';
 import Skeleton, { CardSkeleton } from '../components/ui/Skeleton';
 import { formatDate, formatFileSize, truncateText } from '../lib/utils';
 import api from '../lib/api';
@@ -44,6 +45,8 @@ export default function Dashboard() {
   const { documents } = state;
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
+  const [deleteModal, setDeleteModal] = useState({ open: false, doc: null });
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     fetchDocuments();
@@ -60,14 +63,28 @@ export default function Dashboard() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this document?')) return;
+  const openDeleteModal = (doc) => {
+    setDeleteModal({ open: true, doc });
+  };
+
+  const closeDeleteModal = () => {
+    if (!isDeleting) {
+      setDeleteModal({ open: false, doc: null });
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal.doc) return;
+    setIsDeleting(true);
     try {
-      await api.delete(`/documents/${id}`);
-      dispatch({ type: 'REMOVE_DOCUMENT', payload: id });
+      await api.delete(`/documents/${deleteModal.doc._id}`);
+      dispatch({ type: 'REMOVE_DOCUMENT', payload: deleteModal.doc._id });
       toast.success('Document deleted');
+      setDeleteModal({ open: false, doc: null });
     } catch {
       toast.error('Failed to delete document');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -194,7 +211,7 @@ export default function Dashboard() {
                   <FileText className="h-5 w-5 text-primary-600 dark:text-accent-400" />
                 </div>
                 <button
-                  onClick={() => handleDelete(doc._id)}
+                  onClick={() => openDeleteModal(doc)}
                   className="rounded-xl p-1.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 transition-all"
                   aria-label={`Delete ${doc.originalName}`}
                 >
@@ -235,6 +252,19 @@ export default function Dashboard() {
           ))}
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteModal.open}
+        onClose={closeDeleteModal}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Document"
+        message={`Are you sure you want to delete "${deleteModal.doc?.originalName || 'this document'}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        isLoading={isDeleting}
+      />
     </div>
   );
 }
