@@ -20,6 +20,8 @@ export default function Chat() {
   const [loadingChat, setLoadingChat] = useState(true);
   const [autoplayTTS, setAutoplayTTS] = useState(true);
   const [lastMsgId, setLastMsgId] = useState(null);
+  const [streamingText, setStreamingText] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
   const scrollRef = useRef();
   const inputRef = useRef();
 
@@ -30,7 +32,7 @@ export default function Chat() {
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatHistory, isProcessing]);
+  }, [chatHistory, isProcessing, streamingText]);
 
   const loadChat = async () => {
     setLoadingChat(true);
@@ -47,38 +49,92 @@ export default function Chat() {
   };
 
   const sendMessage = async (text) => {
-    if (!text.trim() || isProcessing) return;
+    if (!text.trim() || isProcessing || isStreaming) return;
 
     const userMsg = { id: generateId(), role: 'user', content: text.trim() };
     dispatch({ type: 'ADD_CHAT_MESSAGE', payload: userMsg });
     setInput('');
+    setIsStreaming(true);
+    setStreamingText('');
     dispatch({ type: 'SET_PROCESSING', payload: true });
 
     try {
-      const { data } = await api.post('/chat/message', {
-        documentId,
-        message: text.trim(),
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/chat/message/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify({
+          documentId,
+          message: text.trim(),
+        }),
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE format: "data: {...}\n\n"
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const parsed = JSON.parse(line.slice(6));
+              if (parsed.token) {
+                fullText += parsed.token;
+                setStreamingText(fullText);
+              }
+              if (parsed.error) {
+                throw new Error(parsed.error);
+              }
+            } catch (parseErr) {
+              // Skip unparseable lines
+              if (parseErr.message && !parseErr.message.includes('JSON')) {
+                throw parseErr; // Re-throw non-JSON errors
+              }
+            }
+          }
+        }
+      }
+
+      // Stream complete - add final message to chat history
       const aiMsgId = generateId();
       const aiMsg = {
         id: aiMsgId,
         role: 'assistant',
-        content: data.response,
-        sources: data.sources || [] // Include source slides
+        content: fullText || 'No response received.',
+        sources: [],
       };
       dispatch({ type: 'ADD_CHAT_MESSAGE', payload: aiMsg });
-      setLastMsgId(aiMsgId); // Mark for autoplay
+      setLastMsgId(aiMsgId);
+      setStreamingText('');
     } catch (error) {
-      console.error('Chat error:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to get response';
-      toast.error(errorMessage);
+      console.error('Stream error:', error);
+      toast.error('Failed to get response. Please try again.');
       const errMsg = {
         id: generateId(),
         role: 'assistant',
         content: "Sorry, I couldn't process your question. Please try again.",
       };
       dispatch({ type: 'ADD_CHAT_MESSAGE', payload: errMsg });
+      setStreamingText('');
     } finally {
+      setIsStreaming(false);
       dispatch({ type: 'SET_PROCESSING', payload: false });
       inputRef.current?.focus();
     }
@@ -197,9 +253,23 @@ export default function Chat() {
           </AnimatePresence>
         )}
 
-        {/* AI typing indicator */}
+        {/* Streaming message display */}
+        {isStreaming && streamingText && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex justify-start"
+          >
+            <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+              <p className="text-sm whitespace-pre-wrap">{streamingText}</p>
+              <span className="inline-block w-1 h-4 ml-1 bg-primary-500 dark:bg-accent-400 animate-pulse" />
+            </div>
+          </motion.div>
+        )}
+
+        {/* AI typing indicator - show when streaming starts but no text yet */}
         <AnimatePresence>
-          {isProcessing && <TypingIndicator />}
+          {(isProcessing || isStreaming) && !streamingText && <TypingIndicator />}
         </AnimatePresence>
 
         <div ref={scrollRef} />
@@ -230,7 +300,7 @@ export default function Chat() {
             className="input-field min-h-[44px] max-h-32 resize-none pr-4"
             placeholder="Ask about your slides…"
             rows={1}
-            disabled={isProcessing}
+            disabled={isProcessing || isStreaming}
             aria-label="Chat message input"
             aria-describedby="chat-input-hint"
           />
@@ -243,14 +313,14 @@ export default function Chat() {
           onTranscription={handleTranscription}
           onVoiceResponse={handleVoiceResponse}
           documentId={documentId}
-          disabled={isProcessing}
+          disabled={isProcessing || isStreaming}
           useFullPipeline={!!documentId}
           autoplayResponse={autoplayTTS}
         />
 
         <button
           type="submit"
-          disabled={!input.trim() || isProcessing}
+          disabled={!input.trim() || isProcessing || isStreaming}
           className="btn-primary rounded-full p-3"
           aria-label="Send message"
         >

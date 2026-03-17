@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getChatHistory, sendMessage } from '../controllers/chat.controller.js';
+import { getChatHistory, sendMessage, sendMessageStream } from '../controllers/chat.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 import { chatMessageValidation, handleValidationErrors } from '../middleware/validate.middleware.js';
 
@@ -9,5 +9,6 @@ router.use(protect);
 
 router.get('/:documentId', getChatHistory);
 router.post('/message', chatMessageValidation, handleValidationErrors, sendMessage);
+router.post('/message/stream', chatMessageValidation, handleValidationErrors, sendMessageStream);
 
 export default router;

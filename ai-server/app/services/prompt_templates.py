@@ -1,5 +1,5 @@
 """
-Prompt templates for the llama-3 language model.
+Prompt templates for the qwen2:1.5b language model.
 
 All prompts are kept here so they can be tuned in one place without
 touching route or service code.  Each builder returns a plain string

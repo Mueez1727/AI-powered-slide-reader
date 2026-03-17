@@ -99,7 +99,7 @@ async def voice_input(
 
     1. Transcribe the uploaded audio via Whisper (STT).
     2. If a *document_id* is provided, use the transcription as a question
-       against the RAG pipeline (FAISS retrieval → llama-3 chat).
+       against the RAG pipeline (FAISS retrieval → qwen2:1.5b chat).
     3. Convert the AI answer to MP3 via gTTS (TTS).
 
     Returns::
@@ -151,7 +151,7 @@ async def voice_input(
 
     if document_id:
         try:
-            results = embedding_service.search(document_id, question, top_k=6)
+            results = embedding_service.search(document_id, question, top_k=5)
 
             if results:
                 messages = build_qa_messages(question, results)

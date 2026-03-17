@@ -24,6 +24,13 @@ function appReducer(state, action) {
       return { ...state, chatHistory: action.payload };
     case 'ADD_CHAT_MESSAGE':
       return { ...state, chatHistory: [...state.chatHistory, action.payload] };
+    case 'UPDATE_CHAT_MESSAGE':
+      return {
+        ...state,
+        chatHistory: state.chatHistory.map((msg) =>
+          msg.id === action.payload.id ? { ...msg, ...action.payload } : msg
+        ),
+      };
     case 'SET_PROCESSING':
       return { ...state, isProcessing: action.payload };
     case 'TOGGLE_SIDEBAR':

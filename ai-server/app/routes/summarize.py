@@ -26,16 +26,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# ── Tuned limits for phi3:mini — max 2000 chars input per LLM call ──
-_MAP_BATCH_CHAR_LIMIT = 2000   # chars of slide content per map batch
+# ── Tuned limits for qwen2:1.5b — keeps each LLM call fast ──
+_MAP_BATCH_CHAR_LIMIT = 1800   # chars of slide content per map batch
 _MAP_MAX_TOKENS = 400          # generation budget per map call
-_REDUCE_CHAR_LIMIT = 2000      # chars of combined summaries for reduce step
+_REDUCE_CHAR_LIMIT = 4000      # chars of combined summaries for reduce step
 _REDUCE_MAX_TOKENS = 1024      # generation budget for final structured output
-_DIRECT_CHAR_LIMIT = 2000      # chars for small-doc single-pass
+_DIRECT_CHAR_LIMIT = 2500      # chars for small-doc single-pass
 _DIRECT_MAX_TOKENS = 1024
 
-# Max chunks to retrieve — more than this rarely adds value but slows things down
-_MAX_CHUNKS = 15
+# Max chunks to retrieve — 8 balances coverage with speed
+_MAX_CHUNKS = 8
 
 
 # ── Request / Response models ───────────────────────────────
@@ -252,6 +252,25 @@ async def summarize_document(request: Request, body: SummarizeRequest):
         raise HTTPException(status_code=503, detail=result.content)
 
     sections = _parse_sections(result.content)
+
+    # Guard: if all sections are empty/whitespace, retry once with direct prompt
+    if not any(sections[k].strip() for k in ("short_summary", "detailed_explanation", "revision_notes")):
+        logger.warning("[Summarize] All sections empty — retrying with direct prompt")
+        fallback_results = results[:3]
+        prompt = build_detailed_summarize_prompt(fallback_results)
+        if len(prompt) > _DIRECT_CHAR_LIMIT + 1500:
+            prompt = prompt[:_DIRECT_CHAR_LIMIT + 1500] + "\n\n[Content truncated]"
+        result = await ollama_service.generate(prompt, max_tokens=_DIRECT_MAX_TOKENS)
+        if not result.ok:
+            raise HTTPException(status_code=503, detail=result.content)
+        sections = _parse_sections(result.content)
+
+    # Final fallback: if still empty, return an error instead of blank strings
+    if not any(sections[k].strip() for k in ("short_summary", "detailed_explanation", "revision_notes")):
+        raise HTTPException(
+            status_code=502,
+            detail="The AI model could not generate a summary. Please try again.",
+        )
 
     return SummarizeResponse(
         short_summary=sections["short_summary"],

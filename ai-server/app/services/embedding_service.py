@@ -120,7 +120,20 @@ class EmbeddingService:
         if not all_vecs:
             return np.empty((0, self.dimension), dtype=np.float32)
 
-        return np.vstack(all_vecs).astype(np.float32)
+        try:
+            matrix = np.vstack(all_vecs).astype(np.float32)
+        except ValueError as exc:
+            # Dimension mismatch between vectors (e.g. a zero fallback was
+            # the wrong size).  Fall back to only the successfully-embedded
+            # vectors whose dimension matches the first one.
+            logger.warning("np.vstack failed (%s) — filtering mismatched vectors", exc)
+            target_dim = all_vecs[0].shape[0]
+            filtered = [v for v in all_vecs if v.shape[0] == target_dim]
+            if not filtered:
+                return np.empty((0, self.dimension), dtype=np.float32)
+            matrix = np.vstack(filtered).astype(np.float32)
+
+        return matrix
 
     # ─────────────────────────────────────────
     # Index lifecycle
@@ -147,17 +160,50 @@ class EmbeddingService:
             logger.warning("All embeddings failed for document %s", document_id)
             return document_id
 
+        # ── Validate embeddings before FAISS ingestion ────────
+        vectors = np.asarray(embeddings_np, dtype=np.float32)
+
+        if vectors.ndim == 1:
+            vectors = vectors.reshape(1, -1)
+
+        if vectors.ndim != 2:
+            logger.error(
+                "Unexpected embedding shape %s for document %s",
+                vectors.shape, document_id,
+            )
+            return document_id
+
         # Update dimension from embeddings
-        self.dimension = int(embeddings_np.shape[1])
+        self.dimension = int(vectors.shape[1])
+
+        logger.info(
+            "[FAISS] Adding vectors: shape=%s, dtype=%s, dim=%d for doc %s",
+            vectors.shape, vectors.dtype, self.dimension, document_id,
+        )
 
         # Create cosine similarity FAISS index
         # _IndexFlatIP is fetched via getattr() at module level to bypass
         # broken SWIG type stubs that cause false Pylint/Pylance errors.
         index = _IndexFlatIP(self.dimension)
 
-        # Add vectors to index (must be float32 for FAISS)
-        vectors = np.asarray(embeddings_np, dtype=np.float32)
-        index.add(vectors)
+        if vectors.shape[1] != index.d:
+            logger.error(
+                "Dimension mismatch: vectors have %d dims but index expects %d",
+                vectors.shape[1], index.d,
+            )
+            raise ValueError(
+                f"Embedding dimension mismatch: got {vectors.shape[1]}, "
+                f"expected {index.d}"
+            )
+
+        try:
+            index.add(vectors)
+        except Exception as exc:
+            logger.exception(
+                "FAISS index.add() failed for doc %s (shape=%s)",
+                document_id, vectors.shape,
+            )
+            raise RuntimeError(f"Failed to build FAISS index: {exc}") from exc
 
         # Cache in memory
         self.indices[document_id] = {
@@ -276,7 +322,7 @@ class EmbeddingService:
             json.dump(metadata, fh, ensure_ascii=False)
 
     def _load_from_disk(self, document_id: str) -> bool:
-        """Load index from disk."""
+        """Load index from disk. Returns False if files are missing or corrupt."""
 
         base = os.path.join(self.index_dir, document_id)
 
@@ -287,7 +333,11 @@ class EmbeddingService:
         if not (os.path.exists(index_path) and os.path.exists(texts_path)):
             return False
 
-        index = faiss.read_index(index_path)
+        try:
+            index = faiss.read_index(index_path)
+        except Exception as exc:
+            logger.error("Corrupt FAISS index for %s: %s", document_id, exc)
+            return False
 
         texts = np.load(texts_path, allow_pickle=True).tolist()
 
@@ -296,6 +346,13 @@ class EmbeddingService:
                 metadata = json.load(fh)
         else:
             metadata = [{} for _ in texts]
+
+        # Sanity: vector count should match text count
+        if index.ntotal != len(texts):
+            logger.warning(
+                "Index/text count mismatch for %s: %d vectors vs %d texts",
+                document_id, index.ntotal, len(texts),
+            )
 
         self.indices[document_id] = {
             "index": index,

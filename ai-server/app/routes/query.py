@@ -4,7 +4,7 @@ RAG query route.
 Accepts a user question and a document ID, retrieves the most relevant
 slide chunks from the FAISS vector index, and returns them as structured
 context.  The caller (Node.js server or frontend) can then forward this
-context to llama-3 via Ollama for answer generation.
+context to qwen2:1.5b via Ollama for answer generation.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ async def query_document(request: Request, body: QueryRequest):
       3. Return ranked chunks with metadata
 
     The returned ``results`` can be injected as context into a prompt
-    for llama-3 (via ``/api/chat``) to produce a grounded answer.
+    for qwen2:1.5b (via ``/api/chat``) to produce a grounded answer.
     """
     embedding_service = request.app.state.embedding_service
 

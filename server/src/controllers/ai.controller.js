@@ -54,6 +54,11 @@ export const transcribeAudio = async (req, res, next) => {
     if (error.code === 'ECONNREFUSED') {
       return res.status(503).json({ message: 'AI server is unavailable' });
     }
+    if (error.response?.data?.detail) {
+      return res.status(error.response.status || 503).json({
+        detail: error.response.data.detail,
+      });
+    }
     next(error);
   }
 };
@@ -121,6 +126,11 @@ export const voiceInput = async (req, res, next) => {
     if (error.code === 'ECONNREFUSED') {
       return res.status(503).json({ message: 'AI server is unavailable' });
     }
+    if (error.response?.data?.detail) {
+      return res.status(error.response.status || 503).json({
+        detail: error.response.data.detail,
+      });
+    }
     next(error);
   }
 };
@@ -165,6 +175,11 @@ export const generateMCQ = async (req, res, next) => {
   } catch (error) {
     if (error.code === 'ECONNREFUSED') {
       return res.status(503).json({ message: 'AI server is unavailable' });
+    }
+    if (error.response?.data?.detail) {
+      return res.status(error.response.status || 503).json({
+        detail: error.response.data.detail,
+      });
     }
     next(error);
   }

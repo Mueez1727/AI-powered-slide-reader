@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen,
@@ -7,10 +6,7 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
-  FileText,
   Sparkles,
-  ChevronDown,
-  ChevronUp,
   RefreshCw,
 } from 'lucide-react';
 import api from '../lib/api';
@@ -128,30 +124,37 @@ export default function SummaryQuiz() {
   const [loadingQuiz, setLoadingQuiz] = useState(false);
   const [expandedSection, setExpandedSection] = useState('short'); // 'short' | 'detailed' | 'revision'
 
+  const [summaryError, setSummaryError] = useState(false);
+
   const handleSummarize = async () => {
     if (!selectedDoc) return toast.error('Select a document first');
     setLoadingSummary(true);
     setSummaryData(null);
+    setSummaryError(false);
     try {
-      // Explicitly call the summarize endpoint (NOT MCQ)
       const { data } = await api.post('/ai/summarize', {
         documentId: selectedDoc
       });
 
-      // Validate response structure
-      if (!data || (!data.short_summary && !data.detailed_explanation && !data.revision_notes)) {
-        toast.error('Received invalid summary data. Please try again.');
+      if (!data ||
+          (!data.short_summary?.trim() &&
+           !data.detailed_explanation?.trim() &&
+           !data.revision_notes?.trim())) {
+        setSummaryError(true);
+        toast.error('Received empty summary. Please try again.');
         return;
       }
 
       setSummaryData({
-        short_summary: data.short_summary || '',
-        detailed_explanation: data.detailed_explanation || '',
-        revision_notes: data.revision_notes || '',
+        short_summary: (data.short_summary || '').trim(),
+        detailed_explanation: (data.detailed_explanation || '').trim(),
+        revision_notes: (data.revision_notes || '').trim(),
       });
     } catch (error) {
       console.error('Summarization error:', error);
-      toast.error('Summarization failed. Please try again.');
+      setSummaryError(true);
+      const msg = error.response?.data?.detail || error.response?.data?.message || 'Summarization failed.';
+      toast.error(msg);
     } finally {
       setLoadingSummary(false);
     }
@@ -184,7 +187,8 @@ export default function SummaryQuiz() {
       setQuiz(normalizedQuestions);
     } catch (error) {
       console.error('Quiz generation error:', error);
-      toast.error('Quiz generation failed. Please try again.');
+      const msg = error.response?.data?.detail || error.response?.data?.message || 'Quiz generation failed.';
+      toast.error(msg);
     } finally {
       setLoadingQuiz(false);
     }
@@ -254,6 +258,23 @@ export default function SummaryQuiz() {
         </div>
       </div>
 
+      {/* Summary error — retry prompt */}
+      {summaryError && !loadingSummary && !summaryData && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card p-6 text-center"
+        >
+          <XCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+            Summary generation failed. The AI model may be busy or unavailable.
+          </p>
+          <button onClick={handleSummarize} disabled={!selectedDoc} className="btn-primary">
+            <RefreshCw className="h-4 w-4" /> Retry Summary
+          </button>
+        </motion.div>
+      )}
+
       {/* Summary result — tabbed display for the 3 sections */}
       <AnimatePresence>
         {(summaryData || loadingSummary) && (
@@ -263,9 +284,20 @@ export default function SummaryQuiz() {
             exit={{ opacity: 0 }}
             className="glass-card p-6"
           >
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
-              <Sparkles className="h-5 w-5 text-primary-500 dark:text-accent-400" /> Summary
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-white">
+                <Sparkles className="h-5 w-5 text-primary-500 dark:text-accent-400" /> Summary
+              </h2>
+              {summaryData && !loadingSummary && (
+                <button
+                  onClick={handleSummarize}
+                  className="btn-ghost text-xs py-1.5 px-3"
+                  title="Regenerate summary"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" /> Regenerate
+                </button>
+              )}
+            </div>
             {loadingSummary ? (
               <div className="space-y-4">
                 <Skeleton variant="text" lines={5} />
@@ -298,7 +330,7 @@ export default function SummaryQuiz() {
                 {/* Tab content */}
                 <AnimatePresence mode="wait">
                   {summaryTabs.map((tab) =>
-                    expandedSection === tab.key && summaryData[tab.field] ? (
+                    expandedSection === tab.key ? (
                       <motion.div
                         key={tab.key}
                         role="tabpanel"
@@ -308,7 +340,13 @@ export default function SummaryQuiz() {
                         transition={{ duration: 0.2 }}
                         className="prose-chat text-sm text-gray-700 dark:text-gray-300"
                       >
-                        <ReactMarkdown>{summaryData[tab.field]}</ReactMarkdown>
+                        {summaryData[tab.field] ? (
+                          <ReactMarkdown>{summaryData[tab.field]}</ReactMarkdown>
+                        ) : (
+                          <p className="italic text-gray-400 dark:text-gray-500">
+                            Not enough content to generate this section.
+                          </p>
+                        )}
                       </motion.div>
                     ) : null
                   )}
@@ -424,7 +462,7 @@ export default function SummaryQuiz() {
       </AnimatePresence>
 
       {/* Empty state */}
-      {!summaryData && !loadingSummary && quiz.length === 0 && !loadingQuiz && (
+      {!summaryData && !loadingSummary && !summaryError && quiz.length === 0 && !loadingQuiz && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
